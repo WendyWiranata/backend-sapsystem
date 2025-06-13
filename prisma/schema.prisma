@@ -1,3 +1,4 @@
+// schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,47 +8,80 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model users {
-  username    String        @id @db.VarChar(20)
-  full_name   String        @db.VarChar(100)
-  email       String        @db.VarChar(100)
-  phone       String        @db.VarChar(15)
-  password    String        @db.VarChar(100)
-  role        Int           @default(2) @db.TinyInt
-  transaction transaction[]
+enum Role {
+  SUPERADMIN
+  ADMIN_PERUSAHAAN
+  KARYAWAN
 }
 
-model genre {
-  idGenre                  Int     @id @default(autoincrement())
-  name                     String  @db.VarChar(100)
-  movie_movie_genreTogenre movie[] @relation("movie_genreTogenre")
+model User {
+  id          Int       @id @default(autoincrement())
+  email String @unique
+  username    String    
+  password    String
+  role        Role
+  perusahaan  Perusahaan? @relation(fields: [perusahaanId], references: [id])
+  perusahaanId Int?
+  karyawan    Karyawan?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
-model movie {
-  idMovie                  Int           @id @default(autoincrement())
-  title                    String        @db.VarChar(100)
-  price                    Float
-  genre                    Int
-  rating                   Float
-  description              String        @db.Text
-  image                    String        @db.Text
-  genre_movie_genreTogenre genre         @relation("movie_genreTogenre", fields: [genre], references: [idGenre], onUpdate: Restrict, map: "movie_ibfk_1")
-  transaction              transaction[]
-
-  @@index([genre], map: "genre")
+model Perusahaan {
+  id          Int       @id @default(autoincrement())
+  nama        String
+  alamat      String?
+  telepon     String?
+  email       String?
+  users       User[]
+  karyawans   Karyawan[]
+  gajis       Gaji[]
+  cutis       Cuti[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
-model transaction {
-  transactionID Int    @id @default(autoincrement())
-  userID        String @db.VarChar(20)
-  movieID       Int
-  harga         Float
-  jumlah        Int    @db.SmallInt
-  total         Float
-  status        Int    @default(1) @db.SmallInt
-  users         users  @relation(fields: [userID], references: [username], onUpdate: Restrict, map: "transaction_ibfk_1")
-  movie         movie  @relation(fields: [movieID], references: [idMovie], onUpdate: Restrict, map: "transaction_ibfk_2")
+model Karyawan {
+  id          Int       @id @default(autoincrement())
+  
+ 
+  jabatan     String
+  departemen  String
+  user        User      @relation(fields: [userId], references: [id])
+  userId      Int       @unique
+  perusahaan  Perusahaan @relation(fields: [perusahaanId], references: [id])
+  perusahaanId Int
+  gajis       Gaji[]
+  cutis       Cuti[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
 
-  @@index([movieID], map: "movieID")
-  @@index([userID], map: "userID")
+model Gaji {
+  id          Int       @id @default(autoincrement())
+  karyawan    Karyawan  @relation(fields: [karyawanId], references: [id])
+  karyawanId  Int
+  perusahaan  Perusahaan @relation(fields: [perusahaanId], references: [id])
+  perusahaanId Int
+  jumlah      Float
+  bulan       Int
+  tahun       Int
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([karyawanId, bulan, tahun])
+}
+
+model Cuti {
+  id          Int       @id @default(autoincrement())
+  karyawan    Karyawan  @relation(fields: [karyawanId], references: [id])
+  karyawanId  Int
+  perusahaan  Perusahaan @relation(fields: [perusahaanId], references: [id])
+  perusahaanId Int
+  tanggalMulai DateTime
+  tanggalSelesai DateTime
+  alasan     String
+  status      String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }

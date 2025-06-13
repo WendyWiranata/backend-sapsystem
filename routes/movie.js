@@ -5,7 +5,7 @@ const {
   edit,
   deleteMovie,
   getById,
-} = require("../controller/movie.controller");
+} = require("../controllers/movie.controller");
 const { upload } = require("../uploadconfig");
 
 const uploadPoster = upload.single("image");

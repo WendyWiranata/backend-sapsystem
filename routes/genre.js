@@ -4,7 +4,7 @@ const {
   getAll,
   edit,
   deleteGenre,
-} = require("../controller/genre.controller");
+} = require("../controllers/genre.controller");
 
 router.post("/insert", insert);
 router.get("/get", getAll);

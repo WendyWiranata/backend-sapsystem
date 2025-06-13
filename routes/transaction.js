@@ -3,7 +3,7 @@ const {
   confirmTransaction,
   getAll,
   getById,
-} = require("../controller/transaction.controller");
+} = require("../controllers/transaction.controller");
 
 const router = require("express").Router();
 
