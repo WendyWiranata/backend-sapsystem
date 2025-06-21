@@ -12,14 +12,18 @@ const getAllCuti = async (req, res) => {
       cutiList = await prisma.cuti.findMany({
         where: { perusahaanId },
         include: {
-          karyawan: {
-            select: {
-              nama: true,
-              nip: true,
-              jabatan: true,
-            },
+        karyawan: {
+          select: {
+            id: true,
+            user: {
+              select: {
+            username: true,
+          
+          },
+            }
           },
         },
+      },
         orderBy: {
           tanggalMulai: "desc",
         },
@@ -41,8 +45,16 @@ const getAllCuti = async (req, res) => {
 };
 
 const createCuti = async (req, res) => {
-  const { perusahaanId, karyawan } = req.user;
-  const { tanggalMulai, tanggalSelesai, alasan } = req.body;
+  // Admin/HR yang login, kita hanya butuh perusahaanId-nya
+  const { perusahaanId } = req.user;
+
+  // Ambil ID karyawan yang akan dibuatkan cuti dari body request
+  const { karyawanId, tanggalMulai, tanggalSelesai, alasan } = req.body;
+
+  // Validasi input
+  if (!karyawanId) {
+    return res.status(400).json({ error: "karyawanId harus disertakan dalam body request." });
+  }
 
   try {
     // Validasi tanggal
@@ -52,10 +64,18 @@ const createCuti = async (req, res) => {
         .json({ error: "Tanggal selesai harus setelah tanggal mulai" });
     }
 
-    // Cek apakah sudah ada cuti yang overlapping
+    // Cek apakah karyawan ada di perusahaan yang sama (opsional tapi disarankan)
+    const karyawanExists = await prisma.karyawan.findFirst({
+        where: { id: Number(karyawanId), perusahaanId: perusahaanId }
+    });
+    if (!karyawanExists) {
+        return res.status(404).json({ error: "Karyawan tidak ditemukan di perusahaan ini." });
+    }
+
+    // Cek cuti overlapping menggunakan karyawanId dari body
     const existingCuti = await prisma.cuti.findFirst({
       where: {
-        karyawanId: karyawan.id,
+        karyawanId: Number(karyawanId),
         OR: [
           {
             tanggalMulai: { lte: new Date(tanggalSelesai) },
@@ -67,25 +87,30 @@ const createCuti = async (req, res) => {
 
     if (existingCuti) {
       return res.status(400).json({
-        error: "Sudah ada cuti yang overlapping dengan tanggal tersebut",
-        existingCuti,
+        error: "Karyawan sudah memiliki jadwal cuti yang bertabrakan.",
       });
     }
 
+    // Buat cuti menggunakan karyawanId dari body
     const cuti = await prisma.cuti.create({
       data: {
-        karyawanId: karyawan.id,
+        karyawanId: Number(karyawanId),
         perusahaanId,
         tanggalMulai: new Date(tanggalMulai),
         tanggalSelesai: new Date(tanggalSelesai),
         alasan,
         status: "PENDING",
       },
-      include: {
+     include: {
         karyawan: {
           select: {
-            nama: true,
-            nip: true,
+            id: true,
+            user: {
+              select: {
+            username: true,
+          
+          },
+            }
           },
         },
       },
@@ -124,11 +149,16 @@ const updateStatusCuti = async (req, res) => {
     const updatedCuti = await prisma.cuti.update({
       where: { id: parseInt(id) },
       data: { status },
-      include: {
+        include: {
         karyawan: {
           select: {
-            nama: true,
-            nip: true,
+            id: true,
+            user: {
+              select: {
+            username: true,
+          
+          },
+            }
           },
         },
       },

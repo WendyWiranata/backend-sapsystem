@@ -87,12 +87,18 @@ const getGajiByKaryawan = async (req, res) => {
       include: {
         karyawan: {
           select: {
-            nama: true,
-            nip: true,
             jabatan: true,
+            user: {
+              select: {
+            username: true,
+            email: true,
+            role: true,
+          },
+            }
           },
         },
       },
+
     });
 
     res.json(gajiList);

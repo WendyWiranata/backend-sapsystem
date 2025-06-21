@@ -37,18 +37,16 @@ const getPerusahaanById = async (req, res) => {
         email: true,
         createdAt: true,
         updatedAt: true,
-        users: {
-          select: {
-            id: true,
-            username: true,
-            role: true,
-          },
-        },
         karyawans: {
           select: {
             id: true,
-            nama: true,
-            nip: true,
+             user: {
+              select: {
+                id: true,
+                username: true,
+                role: true,
+              },
+        },
           },
         },
       },

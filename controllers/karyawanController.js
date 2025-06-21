@@ -4,93 +4,172 @@ const bcrypt = require("bcrypt");
 const validator = require("validator"); // Tambahkan package validator
 
 const getAllKaryawan = async (req, res) => {
-  // ... (implementasi sebelumnya tetap sama)
-};
-
-const getKaryawanById = async (req, res) => {
-  // ... (implementasi sebelumnya tetap sama)
-};
-
-const createKaryawan = async (req, res) => {
-  const { nama, jabatan, departemen, email, password, perusahaanId } = req.body;
-
-  // Validasi input
-  if (!nama || !jabatan || !departemen || !email || !password) {
-    return res.status(400).json({ error: "Semua field wajib diisi" });
-  }
-
-  // Validasi format email
-  if (!validator.isEmail(email)) {
-    return res.status(400).json({ error: "Format email tidak valid" });
-  }
-
-  // Validasi strength password
-  const hashedPassword = await bcrypt.hash(password, 10);
-
   try {
-    // Cek unique username dan email
-    const existingUser = await prisma.user.findFirst({
-      where: {
-        OR: [{ email }],
-      },
-    });
-
-    if (existingUser) {
-      if (existingUser.email === email) {
-        return res.status(400).json({ error: "Email sudah terdaftar" });
-      }
+    const adminPerusahaanId = req.user.perusahaanId;
+    if (!adminPerusahaanId) {
+      return res.status(403).json({ error: "Akses ditolak. Informasi perusahaan admin tidak ditemukan." });
     }
 
-    // Buat user
-    const user = await prisma.user.create({
-      data: {
-        email,
-        username: nama,
-        password: hashedPassword,
-        role: "KARYAWAN",
-        perusahaanId,
+    const karyawan = await prisma.karyawan.findMany({
+      where: {
+        perusahaanId: adminPerusahaanId,
       },
       select: {
         id: true,
-        username: true,
-        email: true,
-        role: true,
-        perusahaanId: true,
-      },
-    });
-
-    // Buat karyawan
-    const karyawan = await prisma.karyawan.create({
-      data: {
-        jabatan,
-        departemen,
-        perusahaan: {
-          connect: {
-            id: perusahaanId,
-          },
-        },
-        user: {
-          connect: {
-            id: user.id,
-          },
-        },
-      },
-      include: {
+        jabatan: true,
+        departemen: true,
         user: {
           select: {
             username: true,
             email: true,
-            role: true,
+          }
+        },
+        perusahaanId: true, 
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return res.json(karyawan);
+  } catch (error) {
+    res.status(500).json({
+      error: "Gagal mengambil data karyawan",
+      details: error.message,
+    });
+  }
+};
+
+const getKaryawanById = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const karyawan = await prisma.karyawan.findUnique({
+      where: { id: parseInt(id) },
+        select: {
+        id: true,
+        jabatan: true,
+        departemen: true,
+        user: {
+          select: {
+            username: true,
+            email: true,
+          }
+        },
+        perusahaanId: true,
+        createdAt: true,
+        updatedAt: true,
+       
+      },
+    });
+
+    if (!karyawan) {
+      return res.status(404).json({ error: "Karyawan tidak ditemukan" });
+    }
+
+    res.json(karyawan);
+  } catch (error) {
+    res.status(500).json({
+      error: "Gagal mengambil data karyawan",
+      details: error.message,
+    });
+  }
+};
+
+const createKaryawan = async (req, res) => {
+  // 1. Ambil data dari body. `perusahaanId` tidak diperlukan lagi dari klien.
+  const { nama, jabatan, departemen, email, password } = req.body;
+
+  // Validasi input dasar
+  if (!nama || !jabatan || !departemen || !email || !password) {
+    return res.status(400).json({ error: "Semua field wajib diisi" });
+  }
+  if (!validator.isEmail(email)) {
+    return res.status(400).json({ error: "Format email tidak valid" });
+  }
+
+  try {
+    // 2. Ambil informasi admin yang sedang login dari `req.user` (disediakan oleh middleware)
+    const adminUser = req.user;
+
+    // 3. Validasi Keamanan dan Hak Akses
+    // Pastikan user yang request adalah admin dan memiliki perusahaanId
+    if (!adminUser || !adminUser.perusahaanId) {
+      return res.status(403).json({ error: "Akses ditolak. Informasi admin perusahaan tidak valid." });
+    }
+
+    // (Opsional tapi sangat direkomendasikan) Cek role spesifik
+    if (adminUser.role !== 'ADMIN_PERUSAHAAN') {
+      return res.status(403).json({ error: "Akses ditolak. Hanya admin perusahaan yang dapat membuat karyawan." });
+    }
+
+    // Ambil ID perusahaan dari admin yang sudah terotentikasi
+    const adminPerusahaanId = adminUser.perusahaanId;
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // 4. Gunakan Transaksi untuk memastikan semua operasi (buat user & karyawan) berhasil atau semua dibatalkan
+    const newKaryawan = await prisma.$transaction(async (tx) => {
+      // Cek apakah email sudah ada di dalam transaksi
+      const existingUser = await tx.user.findUnique({
+        where: { email },
+      });
+
+      if (existingUser) {
+        // Melempar error di dalam transaksi akan otomatis membatalkan (rollback) semuanya
+        throw new Error("Email sudah terdaftar");
+      }
+
+      // Buat user baru, hubungkan ke perusahaan admin secara otomatis
+      const user = await tx.user.create({
+        data: {
+          email,
+          username: nama,
+          password: hashedPassword,
+          role: "KARYAWAN",
+          // Langsung hubungkan ke perusahaan milik admin yang login
+          perusahaan: {
+            connect: { id: adminPerusahaanId },
           },
         },
-      },
+      });
+
+      // Buat karyawan baru, hubungkan ke user yang baru dibuat dan perusahaan admin
+      const karyawan = await tx.karyawan.create({
+        data: {
+          jabatan,
+          departemen,
+          perusahaan: {
+            connect: { id: adminPerusahaanId }, // Otomatis dari admin
+          },
+          user: {
+            connect: { id: user.id },
+          },
+        },
+        include: {
+          user: {
+            select: {
+              username: true,
+              email: true,
+              role: true,
+            },
+          },
+        },
+      });
+
+      return karyawan; // Kembalikan data karyawan jika semua berhasil
     });
 
     res.status(201).json({
       message: "Karyawan berhasil dibuat",
-      data: karyawan,
+      data: newKaryawan,
     });
+
   } catch (error) {
+    // Tangani error spesifik dari transaksi
+    if (error.message === "Email sudah terdaftar") {
+      return res.status(400).json({ error: error.message });
+    }
+
+    // Tangani error umum lainnya
     res.status(500).json({
       error: "Gagal membuat karyawan",
       details: error.message,
@@ -204,17 +283,21 @@ const deleteKaryawan = async (req, res) => {
     }
 
     // Hapus semua data terkait karyawan
-    await prisma.$transaction([
+   await prisma.$transaction([
       prisma.gaji.deleteMany({
         where: { karyawanId: parseInt(id) },
       }),
       prisma.cuti.deleteMany({
         where: { karyawanId: parseInt(id) },
       }),
+      // Delete the Karyawan record first
+      prisma.karyawan.delete({
+        where: { id: parseInt(id) },
+      }),
+      // Then delete the associated User record
       prisma.user.delete({
         where: { id: karyawan.userId },
       }),
-      // Karyawan akan terhapus otomatis karena onDelete: Cascade
     ]);
 
     res.json({

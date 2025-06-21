@@ -14,7 +14,7 @@ router.get(
 );
 
 // Karyawan routes
-router.post("/", roleCheck(["KARYAWAN"]), cutiController.createCuti);
+router.post("/", roleCheck(["ADMIN_PERUSAHAAN","KARYAWAN"]), cutiController.createCuti);
 
 // Admin approve/reject cuti
 router.put(
