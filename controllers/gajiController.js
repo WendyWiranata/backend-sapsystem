@@ -136,7 +136,7 @@ const updateGaji = async (req, res) => {
   try {
     // Cek apakah gaji ada dan milik perusahaan yang sama
     const gaji = await prisma.gaji.findFirst({
-      where: {
+      where: {  
         id: parseInt(id),
         perusahaanId,
       },
